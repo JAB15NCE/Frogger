@@ -73,24 +73,24 @@ impl Obstacle {
     }
 
     fn draw(&self) {
-        execute!(
+        match execute!(
             stdout(),
             cursor::MoveTo(self.x, self.y),
             SetBackgroundColor(Color::Red),
             SetForegroundColor(Color::White),
             Print("#"),
             ResetColor
-        )
-        .unwrap();
+        ) {
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to draw obstacle: {}", e),
+        }
     }
 
     fn clear(&self) {
-        execute!(
-            stdout(),
-            cursor::MoveTo(self.x, self.y),
-            Print(" "),
-        )
-        .unwrap();
+        match execute!(stdout(), cursor::MoveTo(self.x, self.y), Print(" ")) {
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to clear obstacle: {}", e),
+        }
     }
 
     fn r#move(&mut self) {
@@ -115,21 +115,17 @@ fn generate_obstacles() -> Vec<Obstacle> {
 }
 
 fn draw_frog(frog: &Frog) {
-    execute!(
-        stdout(),
-        cursor::MoveTo(frog.x, frog.y),
-        Print(FROG_CHAR),
-    )
-    .unwrap();
+    match execute!(stdout(), cursor::MoveTo(frog.x, frog.y), Print(FROG_CHAR)) {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to draw frog: {}", e),
+    }
 }
 
 fn clear_frog(frog: &Frog) {
-    execute!(
-        stdout(),
-        cursor::MoveTo(frog.x, frog.y),
-        Print(" "),
-    )
-    .unwrap();
+    match execute!(stdout(), cursor::MoveTo(frog.x, frog.y), Print(" ")) {
+        Ok(_) => (),
+        Err(e) => eprintln!("Failed to clear frog: {}", e),
+    }
 }
 
 fn draw_obstacles(obstacles: &[Obstacle]) {
@@ -146,29 +142,40 @@ fn clear_obstacles(obstacles: &[Obstacle]) {
 
 fn check_collision(frog: &Frog, obstacles: &[Obstacle]) -> bool {
     for obstacle in obstacles {
-        // Check if frog's position overlaps with any obstacle
         if frog.x >= obstacle.x
             && frog.x < obstacle.x + obstacle.width
             && frog.y >= obstacle.y
             && frog.y < obstacle.y + obstacle.height
         {
-            return true; // Collision detected
+            return true;
         }
     }
-    false // No collision detected
+    false
 }
 
 fn handle_collision(frog: &mut Frog, obstacles: &[Obstacle]) {
     if check_collision(frog, obstacles) {
-        // Decrease frog's lives
         frog.lives -= 1;
-        // Reset frog's position
         frog.x = WIDTH / 2;
         frog.y = HEIGHT - 1;
     }
 }
 
+struct TerminalCleanup;
+
+impl Drop for TerminalCleanup {
+    fn drop(&mut self) {
+        // Ensure terminal is reset, even in case of panic or early exit
+        match execute!(stdout(), cursor::Show, terminal::Clear(terminal::ClearType::All)) {
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to restore terminal state: {}", e),
+        }
+    }
+}
+
 fn main() {
+    let _cleanup = TerminalCleanup;
+
     let _matches = App::new("Frogger")
         .arg(
             Arg::with_name("difficulty")
@@ -184,12 +191,17 @@ fn main() {
     let mut frog = Frog::new(WIDTH / 2, HEIGHT - 1, MAX_LIVES);
     let mut obstacles = generate_obstacles();
 
-    execute!(
+    match execute!(
         stdout(),
         terminal::Clear(terminal::ClearType::All),
         cursor::Hide
-    )
-    .unwrap();
+    ) {
+        Ok(_) => (),
+        Err(e) => {
+            eprintln!("Failed to clear terminal and hide cursor: {}", e);
+            return;
+        }
+    }
 
     loop {
         draw_frog(&frog);
@@ -218,11 +230,5 @@ fn main() {
         thread::sleep(time::Duration::from_millis(FRAME_RATE));
     }
 
-    execute!(
-        stdout(),
-        terminal::Clear(terminal::ClearType::All),
-        cursor::Show
-    )
-    .unwrap();
+    // The terminal cleanup will automatically restore the cursor and clear the screen.
 }
-
